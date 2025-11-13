@@ -1,0 +1,10 @@
+{
+  "figma": {
+    "accessToken": "your-figma-access-token",
+    "fileKey": "your-figma-file-key"
+  },
+  "output": {
+    "directory": "output"
+  }
+}
+
