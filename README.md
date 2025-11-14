@@ -94,8 +94,6 @@ export PORT=3000  # HTTP 服务器端口（可选）
 直接运行服务器，通过标准输入输出与 Cursor 通信：
 
 ```bash
-npm start
-# 或
 node server.js
 ```
 
