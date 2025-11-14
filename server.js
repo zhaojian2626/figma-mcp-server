@@ -100,7 +100,13 @@ class FigmaMCPServer {
 2. 包含图片填充（IMAGE fill）的节点
 3. 节点名称以 'ic/' 或 'icon/' 开头的节点（图标节点）
 
-这些标记了 isImageNode: true 的节点，可以使用 figma_download_images 工具按需下载。`,
+这些标记了 isImageNode: true 的节点，可以使用 figma_download_images 工具按需下载。
+
+name字段使用说明（强制规则）：
+- 所有节点都必须校验 name 字段，如果 name 中包含功能描述或要求，必须遵守并基于此生成代码
+- name 字段可能包含功能描述信息，例如："点击后弹出会员购买页面 from = xxx"，应基于此生成相应的代码逻辑
+- 调用方必须检查每个节点的 name 字段，如果 name 中包含功能要求（如交互行为、跳转逻辑、参数传递等），必须严格按照 name 中的要求实现
+- 不区分节点类型，所有节点的 name 字段都应被校验和使用`,
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
@@ -294,6 +300,17 @@ class FigmaMCPServer {
                             "节点名称以 'ic/' 或 'icon/' 开头（图标节点）"
                         ],
                         usage: '使用这些节点的 ID 调用 figma_download_images 工具可以下载对应的图片资源'
+                    },
+                    nameFieldRules: {
+                        description: 'name 字段使用规则（强制校验，用于代码生成）',
+                        rules: [
+                            "强制规则：所有节点都必须校验 name 字段，如果 name 中包含功能描述或要求，必须遵守并基于此生成代码",
+                            "name 字段可能包含功能描述信息，例如：name: '点击后弹出会员购买页面 from = xxx'，应基于此生成相应的点击事件处理代码",
+                            "调用方必须检查每个节点的 name 字段，如果 name 中包含功能要求（如交互行为、跳转逻辑、参数传递等），必须严格按照 name 中的要求实现",
+                            "不区分节点类型（TEXT、GROUP、FRAME、COMPONENT 等），所有节点的 name 字段都应被校验和使用",
+                            "如果 name 字段为空或不存在，则无需处理；如果 name 字段包含内容，必须解析其中的功能要求并实现"
+                        ],
+                        usage: '调用方必须检查所有节点的 name 字段，如果 name 中包含功能描述或要求，必须严格遵守并基于此生成代码，不区分节点类型'
                     }
                 }
             };
