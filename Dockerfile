@@ -17,14 +17,14 @@ RUN mkdir -p output/images/downloads
 
 # 设置环境变量
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=3001
 
 # 暴露端口
-EXPOSE 3000
+EXPOSE 3001
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 405 ? 0 : 1)})"
+  CMD node -e "require('http').get('http://localhost:3001', (r) => {process.exit(r.statusCode === 405 ? 0 : 1)})"
 
 # 启动服务器
 CMD ["node", "server-http.js"]

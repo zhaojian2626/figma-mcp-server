@@ -73,7 +73,7 @@ cp config.json.example config.json
 ```bash
 export FIGMA_ACCESS_TOKEN="your-figma-access-token"
 export FIGMA_FILE_KEY="your-figma-file-key"
-export PORT=3000  # HTTP 服务器端口（可选）
+export PORT=3001  # HTTP 服务器端口（可选）
 ```
 
 ### 方式三：HTTP Headers（用于远程访问）
@@ -105,7 +105,7 @@ node server.js
 node server-http.js
 ```
 
-服务器将在 `http://localhost:3000` 启动（可通过 `PORT` 环境变量修改）。
+服务器将在 `http://localhost:3001` 启动（可通过 `PORT` 环境变量修改）。
 
 ## 🔧 Cursor MCP 配置
 
@@ -143,7 +143,7 @@ node server-http.js
 {
   "mcpServers": {
     "figma-server": {
-      "url": "http://localhost:3000",
+      "url": "http://localhost:3001",
       "headers": {
         "X-Figma-Access-Token": "your-figma-access-token",
         "X-Figma-File-Key": "your-figma-file-key"
@@ -159,7 +159,7 @@ node server-http.js
 {
   "mcpServers": {
     "figma-server": {
-      "url": "http://192.168.x.x:3000",
+      "url": "http://192.168.x.x:3001",
       "headers": {
         "X-Figma-Access-Token": "your-figma-access-token",
         "X-Figma-File-Key": "your-figma-file-key"
@@ -175,7 +175,7 @@ node server-http.js
 {
   "mcpServers": {
     "figma-server": {
-      "url": "http://your-server-ip:3000",
+      "url": "http://your-server-ip:3001",
       "headers": {
         "X-Figma-Access-Token": "your-figma-access-token",
         "X-Figma-File-Key": "your-figma-file-key"
@@ -196,7 +196,7 @@ node server-http.js
   "_comment": "Figma MCP Server 配置",
   "mcpServers": {
     "figma-server": {
-      "url": "http://localhost:3000",
+      "url": "http://localhost:3001",
       "headers": {
         "X-Figma-Access-Token": "figd_xxxxx",
         "X-Figma-File-Key": "xxxxx"
@@ -310,15 +310,15 @@ node server-http.js
 
 ```bash
 # 健康检查
-curl -X OPTIONS http://localhost:3000
+curl -X OPTIONS http://localhost:3001
 
 # 测试初始化
-curl -X POST http://localhost:3000 \
+curl -X POST http://localhost:3001 \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 
 # 测试工具列表
-curl -X POST http://localhost:3000 \
+curl -X POST http://localhost:3001 \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 ```
@@ -326,7 +326,7 @@ curl -X POST http://localhost:3000 \
 ### 测试查询页面
 
 ```bash
-curl -X POST http://localhost:3000 \
+curl -X POST http://localhost:3001 \
   -H "Content-Type: application/json" \
   -H "X-Figma-Access-Token: your-token" \
   -H "X-Figma-File-Key: your-file-key" \

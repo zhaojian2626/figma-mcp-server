@@ -9,8 +9,8 @@ import http from 'http';
 import { FigmaMCPServer } from './server.js';
 
 class FigmaMCPHTTPServer {
-    constructor(port = 3000) {
-        this.port = port || process.env.PORT || 3000;
+    constructor(port = 3001) {
+        this.port = port || process.env.PORT || 3001;
         this.mcpServer = new FigmaMCPServer();
     }
 
@@ -130,7 +130,7 @@ class FigmaMCPHTTPServer {
 }
 
 // 启动服务器
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 const server = new FigmaMCPHTTPServer(port);
 server.start();
 

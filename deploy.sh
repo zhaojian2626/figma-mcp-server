@@ -35,7 +35,7 @@ if command -v docker &> /dev/null && [ "$1" == "docker" ]; then
     # 运行容器
     docker run -d \
         --name figma-mcp-server \
-        -p ${PORT:-3000}:3000 \
+        -p ${PORT:-3001}:3001 \
         -e FIGMA_ACCESS_TOKEN="$FIGMA_ACCESS_TOKEN" \
         -e FIGMA_FILE_KEY="$FIGMA_FILE_KEY" \
         -e NODE_ENV=production \
@@ -53,7 +53,7 @@ else
         echo "🔄 使用 PM2 管理进程..."
         pm2 start server-http.js --name figma-mcp-server \
             --env NODE_ENV=production \
-            --env PORT=${PORT:-3000} \
+            --env PORT=${PORT:-3001} \
             --env FIGMA_ACCESS_TOKEN="$FIGMA_ACCESS_TOKEN" \
             --env FIGMA_FILE_KEY="$FIGMA_FILE_KEY"
         pm2 save
@@ -61,7 +61,7 @@ else
         echo "📝 查看日志: pm2 logs figma-mcp-server"
     else
         echo "⚠️  未找到 PM2，直接运行服务器（按 Ctrl+C 停止）..."
-        PORT=${PORT:-3000} \
+        PORT=${PORT:-3001} \
         FIGMA_ACCESS_TOKEN="$FIGMA_ACCESS_TOKEN" \
         FIGMA_FILE_KEY="$FIGMA_FILE_KEY" \
         NODE_ENV=production \
@@ -70,5 +70,5 @@ else
 fi
 
 echo "✅ 部署完成！"
-echo "🌐 服务器地址: http://localhost:${PORT:-3000}"
+echo "🌐 服务器地址: http://localhost:${PORT:-3001}"
 
