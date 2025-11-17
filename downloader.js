@@ -112,6 +112,36 @@ export class Downloader {
                 textAlignHorizontal: node.style.textAlignHorizontal,
                 textAlignVertical: node.style.textAlignVertical
             }
+
+            // 保留字符级别的样式覆盖信息（用于加粗等样式）
+            if (node.characterStyleOverrides && node.characterStyleOverrides.length > 0) {
+                result.characterStyleOverrides = node.characterStyleOverrides;
+            }
+
+            // 保留样式覆盖表（包含加粗等样式定义）
+            if (node.styleOverrideTable && Object.keys(node.styleOverrideTable).length > 0) {
+                result.styleOverrideTable = {};
+                for (const [key, style] of Object.entries(node.styleOverrideTable)) {
+                    result.styleOverrideTable[key] = {
+                        fontFamily: style.fontFamily,
+                        fontStyle: style.fontStyle,
+                        fontWeight: style.fontWeight,
+                        fontSize: style.fontSize
+                    };
+                }
+            }
+
+            // 解析加粗范围，提供更易读的格式
+            if (node.characterStyleOverrides && node.styleOverrideTable) {
+                const boldRanges = this.parseBoldRanges(
+                    node.characters,
+                    node.characterStyleOverrides,
+                    node.styleOverrideTable
+                );
+                if (boldRanges.length > 0) {
+                    result.boldRanges = boldRanges;
+                }
+            }
         }
 
         if (simplifiedChildren && simplifiedChildren.length > 0) {
@@ -123,6 +153,66 @@ export class Downloader {
         }
 
         return result;
+    }
+
+    /**
+     * 解析文本中的加粗范围
+     * @param {string} text - 文本内容
+     * @param {Array} characterStyleOverrides - 字符样式覆盖数组
+     * @param {Object} styleOverrideTable - 样式覆盖表
+     * @returns {Array} 加粗范围数组，每个元素包含 {start, end, text, fontWeight}
+     */
+    parseBoldRanges(text, characterStyleOverrides, styleOverrideTable) {
+        if (!text || !characterStyleOverrides || !styleOverrideTable) {
+            return [];
+        }
+
+        const ranges = [];
+        let currentRange = null;
+
+        for (let i = 0; i < text.length && i < characterStyleOverrides.length; i++) {
+            const styleOverrideKey = characterStyleOverrides[i];
+            
+            // 检查是否有样式覆盖，并且该样式是否为加粗（fontWeight >= 500 或 fontStyle 包含 Bold/Medium）
+            if (styleOverrideKey && styleOverrideTable[styleOverrideKey]) {
+                const style = styleOverrideTable[styleOverrideKey];
+                const isBold = style.fontWeight >= 500 || 
+                             (style.fontStyle && (style.fontStyle.includes('Bold') || style.fontStyle.includes('Medium')));
+
+                if (isBold) {
+                    if (currentRange === null) {
+                        currentRange = {
+                            start: i,
+                            end: i,
+                            fontWeight: style.fontWeight,
+                            fontStyle: style.fontStyle
+                        };
+                    } else {
+                        currentRange.end = i;
+                    }
+                } else {
+                    if (currentRange !== null) {
+                        currentRange.text = text.substring(currentRange.start, currentRange.end + 1);
+                        ranges.push(currentRange);
+                        currentRange = null;
+                    }
+                }
+            } else {
+                if (currentRange !== null) {
+                    currentRange.text = text.substring(currentRange.start, currentRange.end + 1);
+                    ranges.push(currentRange);
+                    currentRange = null;
+                }
+            }
+        }
+
+        // 处理最后一个范围
+        if (currentRange !== null) {
+            currentRange.text = text.substring(currentRange.start, currentRange.end + 1);
+            ranges.push(currentRange);
+        }
+
+        return ranges;
     }
 }
 

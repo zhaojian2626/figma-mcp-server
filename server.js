@@ -120,14 +120,22 @@ name字段使用说明（强制规则）：
                             },
                             {
                                 name: 'figma_download_images',
-                                description: `按需下载指定的图片节点，基于 node-id 列表。
+                                description: `获取指定图片节点的下载 URL（代理模式，不下载到服务器）。
+
+本工具作为代理，返回 Figma API 提供的图片 URL，由客户端直接下载，减少服务器存储和带宽消耗。
 
 支持的图片节点类型：
 1. 节点名称以 'exp_' 开头的节点（导出组，整个节点作为一张图片）
 2. 包含图片填充（IMAGE fill）的节点
 3. 节点名称以 'ic/' 或 'icon/' 开头的节点（图标节点）
 
-建议：先使用 figma_download_and_simplify 获取 JSON 数据，查找标记了 isImageNode: true 的节点，然后使用这些节点的 ID 调用本工具下载图片。`,
+返回结果包含：
+- imageUrl: Figma API 提供的可直接下载的图片 URL
+- nodeId: 节点 ID
+- nodeName: 节点名称
+- fileName: 建议的文件名（基于节点名称）
+
+建议：先使用 figma_download_and_simplify 获取 JSON 数据，查找标记了 isImageNode: true 的节点，然后使用这些节点的 ID 调用本工具获取图片 URL。`,
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
@@ -364,7 +372,7 @@ name字段使用说明（强制规则）：
                 findAllNodes(page);
             });
 
-            // 获取图片 URL
+            // 获取图片 URL（从 Figma API）
             const imageUrls = await this.api.getImageUrls(nodeIds);
 
             if (!imageUrls || Object.keys(imageUrls).length === 0) {
@@ -382,50 +390,33 @@ name字段使用说明（强制规则）：
                 };
             }
 
-            // 创建统一的图片目录（使用第一个节点名称或默认名称）
-            const outputDir = path.resolve(__dirname, this.config.output.directory);
-            const imageDir = path.join(outputDir, 'images', 'downloads');
+            // 构建返回结果（代理模式：只返回 URL，不下载到服务器）
+            const imageResults = [];
             
-            if (!fs.existsSync(imageDir)) {
-                fs.mkdirSync(imageDir, { recursive: true });
-            }
-
-            // 下载所有指定的图片
-            const downloadResults = [];
-            const downloadPromises = Object.keys(imageUrls).map(async (nodeId) => {
+            // 处理成功获取 URL 的节点
+            Object.keys(imageUrls).forEach((nodeId) => {
                 const nodeName = nodeNameMap.get(nodeId) || nodeId;
                 const saneNodeName = this.downloader.sanitizeName(nodeName);
                 const saneNodeId = nodeId.replace(/:/g, '-');
-                const finalFileName = `${saneNodeName}_${saneNodeId}.png`;
-                const filePath = path.join(imageDir, finalFileName);
+                const suggestedFileName = `${saneNodeName}_${saneNodeId}.png`;
+                const imageUrl = imageUrls[nodeId];
 
-                try {
-                    await this.downloadImage(imageUrls[nodeId], filePath);
-                    downloadResults.push({
+                if (imageUrl) {
+                    imageResults.push({
                         nodeId,
                         nodeName,
-                        fileName: finalFileName,
-                        filePath: filePath,
+                        fileName: suggestedFileName,
+                        imageUrl: imageUrl, // Figma API 提供的可直接下载的 URL
                         success: true
-                    });
-                } catch (error) {
-                    downloadResults.push({
-                        nodeId,
-                        nodeName,
-                        fileName: finalFileName,
-                        success: false,
-                        error: error.message
                     });
                 }
             });
-
-            await Promise.all(downloadPromises);
 
             // 处理未找到图片 URL 的节点
             nodeIds.forEach(nodeId => {
                 if (!imageUrls[nodeId]) {
                     const nodeName = nodeNameMap.get(nodeId) || nodeId;
-                    downloadResults.push({
+                    imageResults.push({
                         nodeId,
                         nodeName,
                         success: false,
@@ -434,8 +425,8 @@ name字段使用说明（强制规则）：
                 }
             });
 
-            const successCount = downloadResults.filter(r => r.success).length;
-            const failCount = downloadResults.filter(r => !r.success).length;
+            const successCount = imageResults.filter(r => r.success).length;
+            const failCount = imageResults.filter(r => !r.success).length;
 
             return {
                 content: [
@@ -443,9 +434,9 @@ name字段使用说明（强制规则）：
                         type: 'text',
                         text: JSON.stringify({
                             success: true,
-                            message: `成功下载 ${successCount} 张图片，失败 ${failCount} 张`,
-                            imageDirectory: imageDir,
-                            images: downloadResults
+                            message: `成功获取 ${successCount} 个图片 URL，失败 ${failCount} 个`,
+                            note: '图片 URL 可直接用于下载，客户端应使用这些 URL 从 Figma CDN 下载图片',
+                            images: imageResults
                         }, null, 2)
                     }
                 ]
