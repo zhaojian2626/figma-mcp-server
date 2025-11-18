@@ -248,46 +248,146 @@ name字段使用说明（强制规则）：
     }
 
     async downloadAndSimplify(nodeId) {
+        // 策略追踪信息
+        const strategyInfo = {
+            nodeId: nodeId,
+            strategiesAttempted: [],
+            apiCalls: [],
+            usedGetFile: false,
+            errors: []
+        };
+
         try {
-            // 获取文件数据
-            const fileData = await this.api.getFile();
-            const { document } = fileData;
+            // 优化策略：对于已知 node-id，直接查询节点，避免调用 getFile()
+            // 先尝试直接获取节点数据
+            let dataToProcess = null;
 
-            // 查找目标节点
-            let targetNodeInfo = null;
-            for (const page of document.children) {
-                if (page.id === nodeId) {
-                    targetNodeInfo = { node: page, parentPage: page, type: 'PAGE' };
-                    break;
+            try {
+                // 策略1：直接查询节点（推荐，只消耗1次API调用）
+                strategyInfo.strategiesAttempted.push({
+                    name: '直接查询节点 (getNodeData)',
+                    description: '直接使用 getNodeData() 查询指定节点，只消耗1次API调用',
+                    status: 'attempting'
+                });
+                
+                strategyInfo.apiCalls.push('getNodeData');
+                const nodeData = await this.api.getNodeData(nodeId);
+                
+                if (nodeData && nodeData[nodeId]) {
+                    const nodeDocument = nodeData[nodeId].document;
+                    
+                    // 如果节点是 PAGE 类型，直接使用
+                    if (nodeDocument.type === 'PAGE') {
+                        dataToProcess = nodeDocument;
+                    } 
+                    // 如果节点是其他类型（FRAME, COMPONENT等），直接使用
+                    else {
+                        dataToProcess = nodeDocument;
+                    }
+                    
+                    // 策略1成功
+                    strategyInfo.strategiesAttempted[0].status = 'success';
+                } else {
+                    // 策略1失败：节点数据为空
+                    strategyInfo.strategiesAttempted[0].status = 'failed';
+                    strategyInfo.strategiesAttempted[0].error = '节点数据为空';
+                    strategyInfo.errors.push('直接查询返回的节点数据为空');
                 }
-                const foundFrame = page.children.find(child => child.id === nodeId);
-                if (foundFrame) {
-                    targetNodeInfo = { node: foundFrame, parentPage: page, type: 'FRAME' };
-                    break;
+            } catch (directQueryError) {
+                // 策略1失败：直接查询出错
+                if (strategyInfo.strategiesAttempted.length > 0) {
+                    strategyInfo.strategiesAttempted[0].status = 'failed';
+                    strategyInfo.strategiesAttempted[0].error = directQueryError.message;
+                } else {
+                    strategyInfo.strategiesAttempted.push({
+                        name: '直接查询节点 (getNodeData)',
+                        description: '直接使用 getNodeData() 查询指定节点',
+                        status: 'failed',
+                        error: directQueryError.message
+                    });
                 }
+                strategyInfo.errors.push(`直接查询失败: ${directQueryError.message}`);
+                // 继续执行回退策略
             }
 
-            if (!targetNodeInfo) {
-                throw new Error(`Node not found: ${nodeId}`);
-            }
-
-            const { node: targetNode, parentPage, type: nodeType } = targetNodeInfo;
-
-            // 获取完整的页面数据
-            const pageData = await this.api.getNodeData(parentPage.id);
-            const fullPageNode = pageData[parentPage.id]?.document;
-
-            if (!fullPageNode) {
-                throw new Error(`Could not fetch full data for page ${parentPage.id}`);
-            }
-
-            // 获取要处理的数据
-            const dataToProcess = (nodeType === 'PAGE')
-                ? fullPageNode
-                : fullPageNode.children.find(child => child.id === nodeId);
-
+            // 策略2：如果直接查询失败，使用 getFile() 查找节点位置（需要2次API调用）
             if (!dataToProcess) {
-                throw new Error(`Could not find node data for ${nodeId} within the page data.`);
+                strategyInfo.usedGetFile = true;
+                strategyInfo.strategiesAttempted.push({
+                    name: '使用 getFile() 查找节点',
+                    description: '通过 getFile() 获取文件结构，然后查找节点位置，需要2次API调用',
+                    status: 'attempting'
+                });
+
+                try {
+                    strategyInfo.apiCalls.push('getFile');
+                    const fileData = await this.api.getFile();
+                    const { document } = fileData;
+
+                    // 查找目标节点
+                    let targetNodeInfo = null;
+                    for (const page of document.children) {
+                        if (page.id === nodeId) {
+                            targetNodeInfo = { node: page, parentPage: page, type: 'PAGE' };
+                            break;
+                        }
+                        const foundFrame = page.children.find(child => child.id === nodeId);
+                        if (foundFrame) {
+                            targetNodeInfo = { node: foundFrame, parentPage: page, type: 'FRAME' };
+                            break;
+                        }
+                    }
+
+                    if (!targetNodeInfo) {
+                        const errorMsg = `Node not found: ${nodeId}`;
+                        strategyInfo.strategiesAttempted[strategyInfo.strategiesAttempted.length - 1].status = 'failed';
+                        strategyInfo.strategiesAttempted[strategyInfo.strategiesAttempted.length - 1].error = errorMsg;
+                        strategyInfo.errors.push(errorMsg);
+                        throw new Error(errorMsg);
+                    }
+
+                    const { node: targetNode, parentPage, type: nodeType } = targetNodeInfo;
+
+                    // 获取完整的页面数据
+                    strategyInfo.apiCalls.push('getNodeData');
+                    const pageData = await this.api.getNodeData(parentPage.id);
+                    const fullPageNode = pageData[parentPage.id]?.document;
+
+                    if (!fullPageNode) {
+                        const errorMsg = `Could not fetch full data for page ${parentPage.id}`;
+                        strategyInfo.strategiesAttempted[strategyInfo.strategiesAttempted.length - 1].status = 'failed';
+                        strategyInfo.strategiesAttempted[strategyInfo.strategiesAttempted.length - 1].error = errorMsg;
+                        strategyInfo.errors.push(errorMsg);
+                        throw new Error(errorMsg);
+                    }
+
+                    // 获取要处理的数据
+                    dataToProcess = (nodeType === 'PAGE')
+                        ? fullPageNode
+                        : fullPageNode.children.find(child => child.id === nodeId);
+
+                    if (!dataToProcess) {
+                        const errorMsg = `Could not find node data for ${nodeId} within the page data.`;
+                        strategyInfo.strategiesAttempted[strategyInfo.strategiesAttempted.length - 1].status = 'failed';
+                        strategyInfo.strategiesAttempted[strategyInfo.strategiesAttempted.length - 1].error = errorMsg;
+                        strategyInfo.errors.push(errorMsg);
+                        throw new Error(errorMsg);
+                    }
+
+                    // 策略2成功
+                    strategyInfo.strategiesAttempted[strategyInfo.strategiesAttempted.length - 1].status = 'success';
+                } catch (getFileError) {
+                    // 策略2失败
+                    if (strategyInfo.strategiesAttempted.length > 0) {
+                        const lastStrategy = strategyInfo.strategiesAttempted[strategyInfo.strategiesAttempted.length - 1];
+                        if (lastStrategy.status === 'attempting') {
+                            lastStrategy.status = 'failed';
+                            lastStrategy.error = getFileError.message;
+                        }
+                    }
+                    strategyInfo.errors.push(`getFile() 策略失败: ${getFileError.message}`);
+                    throw getFileError; // 重新抛出错误，让外层 catch 处理
+                }
             }
 
             // 简化数据（不下载图片）
@@ -300,6 +400,16 @@ name字段使用说明（强制规则）：
             const result = {
                 data: simplifiedData,
                 metadata: {
+                    apiOptimization: {
+                        description: 'API 调用优化策略',
+                        strategy: strategyInfo.usedGetFile 
+                            ? '使用了 getFile() 方法查找节点位置（需要遍历文件结构）' 
+                            : '直接使用 getNodeData() 查询节点（推荐，更高效）',
+                        apiCalls: strategyInfo.apiCalls,
+                        apiCallCount: strategyInfo.apiCalls.length,
+                        strategiesAttempted: strategyInfo.strategiesAttempted,
+                        note: '尽量减少 getFile() 调用，只有明确需要查询页面节点时才调用 getFile()。对于已知 node-id，直接查询节点，避免调用 getFile()。'
+                    },
                     imageNodeRules: {
                         description: '以下节点被标记为可下载的图片节点（isImageNode: true）',
                         rules: [
@@ -335,7 +445,16 @@ name字段使用说明（强制规则）：
         } catch (error) {
             const errorResponse = {
                 success: false,
-                error: error.message
+                error: error.message,
+                strategyInfo: {
+                    nodeId: strategyInfo.nodeId,
+                    strategiesAttempted: strategyInfo.strategiesAttempted,
+                    apiCalls: strategyInfo.apiCalls,
+                    apiCallCount: strategyInfo.apiCalls.length,
+                    usedGetFile: strategyInfo.usedGetFile,
+                    errors: strategyInfo.errors,
+                    summary: `尝试了 ${strategyInfo.strategiesAttempted.length} 种策略，${strategyInfo.strategiesAttempted.filter(s => s.status === 'success').length} 种成功，${strategyInfo.strategiesAttempted.filter(s => s.status === 'failed').length} 种失败`
+                }
             };
 
             // 如果有详细信息（如 429 错误详情），包含进去
