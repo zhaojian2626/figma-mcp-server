@@ -333,14 +333,30 @@ name字段使用说明（强制规则）：
                 ]
             };
         } catch (error) {
+            const errorResponse = {
+                success: false,
+                error: error.message
+            };
+
+            // 如果有详细信息（如 429 错误详情），包含进去
+            if (error.details) {
+                errorResponse.details = error.details;
+            }
+
+            // 如果是 axios 错误，包含更多信息
+            if (error.response) {
+                errorResponse.status = error.response.status;
+                errorResponse.statusText = error.response.statusText;
+                if (error.response.data) {
+                    errorResponse.responseData = error.response.data;
+                }
+            }
+
             return {
                 content: [
                     {
                         type: 'text',
-                        text: JSON.stringify({
-                            success: false,
-                            error: error.message
-                        }, null, 2)
+                        text: JSON.stringify(errorResponse, null, 2)
                     }
                 ],
                 isError: true
@@ -442,14 +458,30 @@ name字段使用说明（强制规则）：
                 ]
             };
         } catch (error) {
+            const errorResponse = {
+                success: false,
+                error: error.message
+            };
+
+            // 如果有详细信息（如 429 错误详情），包含进去
+            if (error.details) {
+                errorResponse.details = error.details;
+            }
+
+            // 如果是 axios 错误，包含更多信息
+            if (error.response) {
+                errorResponse.status = error.response.status;
+                errorResponse.statusText = error.response.statusText;
+                if (error.response.data) {
+                    errorResponse.responseData = error.response.data;
+                }
+            }
+
             return {
                 content: [
                     {
                         type: 'text',
-                        text: JSON.stringify({
-                            success: false,
-                            error: error.message
-                        }, null, 2)
+                        text: JSON.stringify(errorResponse, null, 2)
                     }
                 ],
                 isError: true
