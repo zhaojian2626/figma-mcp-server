@@ -20,6 +20,56 @@ class FigmaMCPServer {
         this.config = this.loadConfig();
     }
 
+    /**
+     * 从 Figma URL 中提取 fileKey 和 nodeId
+     * 支持的 URL 格式：
+     * - https://www.figma.com/design/{fileKey}/{fileName}?node-id={nodeId}
+     * - https://figma.com/design/{fileKey}/{fileName}?node-id={nodeId}
+     * - https://www.figma.com/file/{fileKey}/{fileName}?node-id={nodeId}
+     * 
+     * @param {string} urlOrNodeId - Figma URL 或 nodeId
+     * @returns {Object} { fileKey: string|null, nodeId: string|null, isUrl: boolean }
+     */
+    parseFigmaUrl(urlOrNodeId) {
+        if (!urlOrNodeId || typeof urlOrNodeId !== 'string') {
+            return { fileKey: null, nodeId: null, isUrl: false };
+        }
+
+        // 检查是否是 URL（必须以 http:// 或 https:// 开头）
+        if (!urlOrNodeId.startsWith('http://') && !urlOrNodeId.startsWith('https://')) {
+            // 不是 URL，可能是 nodeId
+            return { fileKey: null, nodeId: urlOrNodeId, isUrl: false };
+        }
+
+        try {
+            // 检查是否是 Figma URL
+            const urlPattern = /^https?:\/\/(www\.)?figma\.com\/(design|file)\/([^\/]+)\/[^?]*(\?.*)?$/;
+            const match = urlOrNodeId.match(urlPattern);
+            
+            if (match) {
+                const fileKey = match[3];
+                let nodeId = null;
+                
+                // 从查询参数中提取 node-id
+                const urlObj = new URL(urlOrNodeId);
+                const nodeIdParam = urlObj.searchParams.get('node-id');
+                
+                if (nodeIdParam) {
+                    // 将 node-id 格式（如 "4-419"）转换为 API 格式（如 "4:419"）
+                    nodeId = nodeIdParam.replace(/-/g, ':');
+                }
+                
+                return { fileKey, nodeId, isUrl: true };
+            }
+        } catch (error) {
+            // URL 解析失败，不是有效的 URL
+            // 继续执行，返回 nodeId
+        }
+        
+        // 不是有效的 Figma URL，可能是 nodeId
+        return { fileKey: null, nodeId: urlOrNodeId, isUrl: false };
+    }
+
     loadConfig() {
         const configFile = path.resolve(__dirname, 'config.json');
         let config = { output: { directory: 'output' } };
@@ -106,13 +156,17 @@ name字段使用说明（强制规则）：
 - 所有节点都必须校验 name 字段，如果 name 中包含功能描述或要求，必须遵守并基于此生成代码
 - name 字段可能包含功能描述信息，例如："点击后弹出会员购买页面 from = xxx"，应基于此生成相应的代码逻辑
 - 调用方必须检查每个节点的 name 字段，如果 name 中包含功能要求（如交互行为、跳转逻辑、参数传递等），必须严格按照 name 中的要求实现
-- 不区分节点类型，所有节点的 name 字段都应被校验和使用`,
+- 不区分节点类型，所有节点的 name 字段都应被校验和使用
+
+参数说明：
+- nodeId: 可以是 Figma URL（如 https://www.figma.com/design/MNExpk61JtsI2KSgETsArb/Untitled?node-id=4-419）或节点 ID（如 "4:419"）
+- 如果提供 URL，将从 URL 中提取 fileKey 和 nodeId；如果只提供 nodeId，将使用配置的 fileKey`,
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
                                         nodeId: {
                                             type: 'string',
-                                            description: 'Figma 节点 ID（Page ID 或 Frame ID）'
+                                            description: 'Figma URL 或节点 ID（Page ID 或 Frame ID）。支持完整 URL（如 https://www.figma.com/design/{fileKey}/{fileName}?node-id={nodeId}）或节点 ID（如 "4:419"）'
                                         }
                                     },
                                     required: ['nodeId']
@@ -193,11 +247,34 @@ name字段使用说明（强制规则）：
 
         // 优先使用 mcp_config 中的凭证，如果没有则从配置文件读取
         const accessToken = mcp_config?.accessToken || this.config.figma?.accessToken;
-        const fileKey = mcp_config?.fileKey || this.config.figma?.fileKey;
+        let fileKey = mcp_config?.fileKey || this.config.figma?.fileKey;
 
-        if (!accessToken || !fileKey) {
-            // Throw an error that includes the received params for debugging
-            throw new Error(`Figma accessToken and fileKey are required. Please configure them in config.json or provide via mcp_config. Received params: ${JSON.stringify(params, null, 2)}`);
+        // 对于需要 nodeId 的工具，尝试从 URL 中提取 fileKey 和 nodeId
+        if (args?.nodeId) {
+            const urlParseResult = this.parseFigmaUrl(args.nodeId);
+            if (urlParseResult.isUrl && urlParseResult.fileKey) {
+                // 从 URL 中提取的 fileKey 优先级最高
+                fileKey = urlParseResult.fileKey;
+                // 更新 args.nodeId 为提取的 nodeId（如果有）
+                if (urlParseResult.nodeId) {
+                    args.nodeId = urlParseResult.nodeId;
+                } else {
+                    // URL 中没有 node-id，但提供了 URL，说明用户可能想使用 URL 中的 fileKey
+                    // 对于需要 nodeId 的工具，如果没有 nodeId，保持原值（可能是完整的 URL 或其他格式）
+                    // 后续处理会根据具体情况报错或处理
+                }
+            }
+        }
+
+        // accessToken 是必需的，fileKey 在某些情况下可以是可选的（如果从 URL 提取）
+        if (!accessToken) {
+            throw new Error(`Figma accessToken is required. Please configure it in config.json or provide via mcp_config.`);
+        }
+
+        // 对于需要 fileKey 的工具，检查是否已获取
+        const toolsRequiringFileKey = ['figma_list_frames', 'figma_download_and_simplify', 'figma_download_images'];
+        if (toolsRequiringFileKey.includes(name) && !fileKey) {
+            throw new Error(`Figma fileKey is required for ${name}. Please configure it in config.json, provide via mcp_config, or include it in the Figma URL.`);
         }
 
         this.api = new FigmaApi(accessToken, fileKey);

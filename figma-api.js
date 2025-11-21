@@ -12,6 +12,14 @@ export class FigmaApi {
         });
     }
 
+    /**
+     * 设置或更新 fileKey
+     * @param {string} fileKey - 新的 fileKey
+     */
+    setFileKey(fileKey) {
+        this.fileKey = fileKey;
+    }
+
     async getFile() {
         try {
             const response = await this.axios.get(`/files/${this.fileKey}`);
